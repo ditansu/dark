@@ -728,6 +728,11 @@ and BuiltInParam =
 
 and Param = { name : string; typ : TypeReference }
 
+type ComparatorResult =
+  | Higher
+  | Lower
+  | Equal
+
 
 module CallStack =
   let fromEntryPoint (entrypoint : ExecutionPoint) : CallStack =

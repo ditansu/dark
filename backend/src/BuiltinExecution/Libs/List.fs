@@ -14,23 +14,30 @@ module TypeChecker = LibExecution.TypeChecker
 // rather than 0/1/-2
 
 module DvalComparator =
-  let rec compareDval (dv1 : Dval) (dv2 : Dval) : int =
+  let inline compare' (e1: 'T) (e2: 'T) : ComparatorResult =
+    match compare e1 e2 with
+    | 0 -> ComparatorResult.Equal
+    | -1 -> ComparatorResult.Lower
+    | 1 -> ComparatorResult.Higher
+    | _ -> ComparatorResult.Equal
+
+  let rec compareDval (dv1 : Dval) (dv2 : Dval) : ComparatorResult =
     match dv1, dv2 with
-    | DInt64 i1, DInt64 i2 -> compare i1 i2
-    | DUInt64 i1, DUInt64 i2 -> compare i1 i2
-    | DInt8 i1, DInt8 i2 -> compare i1 i2
-    | DUInt8 i1, DUInt8 i2 -> compare i1 i2
-    | DInt16 i1, DInt16 i2 -> compare i1 i2
-    | DUInt16 i1, DUInt16 i2 -> compare i1 i2
-    | DInt32 i1, DInt32 i2 -> compare i1 i2
-    | DUInt32 i1, DUInt32 i2 -> compare i1 i2
-    | DInt128 i1, DInt128 i2 -> compare i1 i2
-    | DUInt128 i1, DUInt128 i2 -> compare i1 i2
-    | DFloat f1, DFloat f2 -> compare f1 f2
-    | DBool b1, DBool b2 -> compare b1 b2
-    | DUnit, DUnit -> 0
-    | DString s1, DString s2 -> compare s1 s2
-    | DChar c1, DChar c2 -> compare c1 c2
+    | DInt64 i1, DInt64 i2 -> compare' i1 i2
+    | DUInt64 i1, DUInt64 i2 -> compare' i1 i2
+    | DInt8 i1, DInt8 i2 -> compare' i1 i2
+    | DUInt8 i1, DUInt8 i2 -> compare' i1 i2
+    | DInt16 i1, DInt16 i2 -> compare' i1 i2
+    | DUInt16 i1, DUInt16 i2 -> compare' i1 i2
+    | DInt32 i1, DInt32 i2 -> compare' i1 i2
+    | DUInt32 i1, DUInt32 i2 -> compare' i1 i2
+    | DInt128 i1, DInt128 i2 -> compare' i1 i2
+    | DUInt128 i1, DUInt128 i2 -> compare' i1 i2
+    | DFloat f1, DFloat f2 -> compare' f1 f2
+    | DBool b1, DBool b2 -> compare' b1 b2
+    | DUnit, DUnit -> ComparatorResult.Equal
+    | DString s1, DString s2 -> compare' s1 s2
+    | DChar c1, DChar c2 -> compare' c1 c2
     | DList(_, l1), DList(_, l2) -> compareLists l1 l2
     | DTuple(a1, b1, l1), DTuple(a2, b2, l2) ->
       compareLists (a1 :: b1 :: l1) (a2 :: b2 :: l2)
@@ -38,22 +45,22 @@ module DvalComparator =
       let l1' = NEList.toList l1.parameters
       let l2' = NEList.toList l2.parameters
       let c = compareLetPatternsLists l1' l2'
-      if c = 0 then compareExprs l1.body l2.body else c
+      if c = ComparatorResult.Equal then compareExprs l1.body l2.body else c
 
-    | DDB name1, DDB name2 -> compare name1 name2
-    | DDateTime dt1, DDateTime dt2 -> compare dt1 dt2
-    | DUuid u1, DUuid u2 -> compare u1 u2
+    | DDB name1, DDB name2 -> compare' name1 name2
+    | DDateTime dt1, DDateTime dt2 -> compare' dt1 dt2
+    | DUuid u1, DUuid u2 -> compare' u1 u2
     | DDict(_vtTODO1, o1), DDict(_vtTODO2, o2) ->
       compareMaps (Map.toList o1) (Map.toList o2)
     | DRecord(tn1, _, _typeArgsTODO1, o1), DRecord(tn2, _, _typeArgsTODO2, o2) ->
-      let c = compare tn1 tn2
-      if c = 0 then compareMaps (Map.toList o1) (Map.toList o2) else c
+      let c = compare' tn1 tn2
+      if c = ComparatorResult.Equal then compareMaps (Map.toList o1) (Map.toList o2) else c
     | DEnum(typeName1, _, _typeArgsTODO1, case1, fields1),
       DEnum(typeName2, _, _typeArgsTODO2, case2, fields2) ->
-      let c = compare typeName1 typeName2
-      if c = 0 then
-        let c = compare case1 case2
-        if c = 0 then compareLists fields1 fields2 else c
+      let c = compare' typeName1 typeName2
+      if c = ComparatorResult.Equal then
+        let c = compare' case1 case2
+        if c = ComparatorResult.Equal then compareLists fields1 fields2 else c
       else
         c
 
@@ -84,67 +91,72 @@ module DvalComparator =
     | DEnum _, _ ->
       // TODO: Feels like this should hook into typechecker and ValueTypes somehow
       raiseUntargetedString "Comparing different types" [ "dv1", dv1; "dv2", dv2 ]
-  and compareLetPatternsLists (l1 : List<LetPattern>) (l2 : List<LetPattern>) : int =
+  and compareLetPatternsLists (l1 : List<LetPattern>) (l2 : List<LetPattern>) : ComparatorResult =
 
-    let rec equalsLetPattern (pattern1 : LetPattern) (pattern2 : LetPattern) : int =
+    let rec equalsLetPattern (pattern1 : LetPattern) (pattern2 : LetPattern) : ComparatorResult =
       match pattern1, pattern2 with
-      | LPVariable(_, name1), LPVariable(_, name2) -> compare name1 name2
-      | LPUnit _, LPUnit _ -> 0
+      | LPVariable(_, name1), LPVariable(_, name2) -> compare' name1 name2
+      | LPUnit _, LPUnit _ -> ComparatorResult.Equal
 
       | LPTuple(_, first, second, theRest), LPTuple(_, first', second', theRest') ->
         let all = first :: second :: theRest
         let all' = first' :: second' :: theRest'
         if all.Length <> all'.Length then
-          compare all.Length all'.Length
+          compare' all.Length all'.Length
         else
           let c = equalsLetPattern first first'
-          if c = 0 then
+          if c = ComparatorResult.Equal then
             let c = equalsLetPattern second second'
-            if c = 0 then compareLetPatternsLists theRest theRest' else c
+            if c = ComparatorResult.Equal then compareLetPatternsLists theRest theRest' else c
           else
             c
 
-      | LPTuple _, LPVariable _ -> 1
-      | LPTuple _, LPUnit _ -> 1
-      | LPUnit _, LPVariable _ -> -1
-      | LPVariable _, LPUnit _ -> 1
-      | LPVariable _, LPTuple _ -> -1
-      | _, _ -> -1
+      | LPTuple _, LPVariable _ -> ComparatorResult.Higher
+      | LPTuple _, LPUnit _ -> ComparatorResult.Higher
+      | LPUnit _, LPVariable _ -> ComparatorResult.Lower
+      | LPVariable _, LPUnit _ -> ComparatorResult.Higher
+      | LPVariable _, LPTuple _ -> ComparatorResult.Lower
+      | _, _ -> ComparatorResult.Lower
 
     match l1, l2 with
-    | [], [] -> 0
-    | [], _ -> -1
-    | _, [] -> 1
+    | [], [] -> ComparatorResult.Equal
+    | [], _ -> ComparatorResult.Lower
+    | _, [] -> ComparatorResult.Higher
     | h1 :: t1, h2 :: t2 ->
       let c = equalsLetPattern h1 h2
-      if c = 0 then compareLetPatternsLists t1 t2 else c
+      if c = ComparatorResult.Equal then compareLetPatternsLists t1 t2 else c
 
 
 
-  and compareLists (l1 : List<Dval>) (l2 : List<Dval>) : int =
+  and compareLists (l1 : List<Dval>) (l2 : List<Dval>) : ComparatorResult =
     match l1, l2 with
-    | [], [] -> 0
-    | [], _ -> -1
-    | _, [] -> 1
+    | [], [] -> ComparatorResult.Equal
+    | [], _ -> ComparatorResult.Lower
+    | _, [] -> ComparatorResult.Higher
     | h1 :: t1, h2 :: t2 ->
       let c = compareDval h1 h2
-      if c = 0 then compareLists t1 t2 else c
+      if c = ComparatorResult.Equal then compareLists t1 t2 else c
 
-  and compareMaps (o1 : List<string * Dval>) (o2 : List<string * Dval>) : int =
+  and compareMaps (o1 : List<string * Dval>) (o2 : List<string * Dval>) : ComparatorResult =
     match o1, o2 with
-    | [], [] -> 0
-    | [], _ -> -1
-    | _, [] -> 1
+    | [], [] -> ComparatorResult.Equal
+    | [], _ -> ComparatorResult.Lower
+    | _, [] -> ComparatorResult.Higher
     | (k1, v1) :: t1, (k2, v2) :: t2 ->
-      let c = compare k1 k2
-      if c = 0 then
+      let c = compare' k1 k2
+      if c = ComparatorResult.Equal then
         let c = compareDval v1 v2
-        if c = 0 then compareMaps t1 t2 else c
+        if c = ComparatorResult.Equal then compareMaps t1 t2 else c
       else
         c
 
-  and compareExprs (_e1 : Expr) (_e2 : Expr) : int = 0 // CLEANUP
-
+  and compareExprs (_e1 : Expr) (_e2 : Expr) : ComparatorResult = ComparatorResult.Equal // CLEANUP
+  // need for compatible with lib functions like List.stortWith
+  and compareDvalReturnInt (dv1 : Dval) (dv2 : Dval) : int =
+    match compareDval dv1 dv2 with
+    | ComparatorResult.Equal -> 0
+    | ComparatorResult.Lower -> -1
+    | ComparatorResult.Higher -> 1
 
 
 // Based on https://github.com/dotnet/runtime/blob/57bfe474518ab5b7cfe6bf7424a79ce3af9d6657/src/coreclr/tools/Common/Sorting/MergeSortCore.cs#L55
@@ -294,7 +306,7 @@ let fns : List<BuiltInFn> =
               projected
               |> List.distinctBy snd
               |> List.map fst
-              |> List.sortWith DvalComparator.compareDval
+              |> List.sortWith DvalComparator.compareDvalReturnInt
               |> fun l -> DList(vt, l)
           }
         | _ -> incorrectArgs ())
@@ -329,7 +341,7 @@ let fns : List<BuiltInFn> =
         (function
         | _, _, [ DList(vt, l) ] ->
           List.distinct l
-          |> List.sortWith DvalComparator.compareDval
+          |> List.sortWith DvalComparator.compareDvalReturnInt
           |> fun l -> DList(vt, l)
           |> Ply
         | _ -> incorrectArgs ())
@@ -353,7 +365,7 @@ let fns : List<BuiltInFn> =
         (function
         | _, _, [ DList(vt, list) ] ->
           list
-          |> List.sortWith DvalComparator.compareDval
+          |> List.sortWith DvalComparator.compareDvalReturnInt
           |> (fun l -> DList(vt, l))
           |> Ply
         | _ -> incorrectArgs ())
@@ -395,7 +407,7 @@ let fns : List<BuiltInFn> =
             return
               withKeys
               |> List.sortWith (fun (k1, _) (k2, _) ->
-                DvalComparator.compareDval k1 k2)
+                DvalComparator.compareDvalReturnInt k1 k2)
               |> List.map snd
               |> fun l -> DList(vt, l)
           }
@@ -416,7 +428,7 @@ let fns : List<BuiltInFn> =
             [ "a"; "b" ] ]
       returnType = TypeReference.result varA TString
       description =
-        "Returns a copy of <param list>, sorted using {{fn a b}} to compare values
+        "Returns a copy of <param list>, sorted using {{fn a b}} to compare' values
          <var a> and <var b>.
 
          <param f> must return {{-1}} if <var a> should appear before <var b>, {{1}}
